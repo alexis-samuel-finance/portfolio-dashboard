@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+<style>
+body {
+    margin:0;
+    background:#004902;
+    color:#EAEAEA;
+    font-family:Inter;
+}
+
+.container {
+    display:grid;
+    grid-template-columns:260px 1fr;
+    height:100vh;
+}
+
+/* SIDEBAR */
+.sidebar {
+    background:#111827;
+    padding:15px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+}
+
+.sidebar label {
+    font-size:12px;
+    opacity:0.7;
+}
+
+/* MAIN */
+.main {
+    padding:20px;
+    display:flex;
+    flex-direction:column;
+    gap:20px;
+}
+
+/* CARDS */
+.card {
+    background:#151A23;
+    border-radius:12px;
+    padding:15px;
+    box-shadow:0 0 0 1px rgba(255,255,255,0.05);
+}
+
+/* KPI GRID */
+.kpi-grid {
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:15px;
+}
+
+.kpi {
+    background:#111827;
+    padding:12px;
+    border-radius:10px;
+}
+
+/* INPUTS */
+input, button {
+    padding:8px;
+    background:#0B0F19;
+    border:1px solid #22c55e;
+    color:white;
+    border-radius:6px;
+}
+
+button:hover {
+    background:#22c55e;
+    color:black;
+}
+
+/* BUTTON GROUP */
+.btn-group {
+    display:flex;
+    gap:6px;
+    margin-bottom:10px;
+}
+
+.btn-sm {
+    padding:4px 8px;
+    font-size:11px;
+}
+
+/* TABLE */
+table {
+    width:100%;
+    border-collapse:collapse;
+    border-radius:8px;
+    overflow:hidden;
+}
+
+th {
+    background:#1F2937;
+    padding:8px;
+}
+
+td {
+    padding:8px;
+}
+
+tr:nth-child(even){background:#111827;}
+tr:nth-child(odd){background:#151A23;}
+
+.split {
+    display:grid;
+    grid-template-columns:2fr 1fr;
+    gap:20px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+
+<label>Tickers</label>
+<input id="tickers" value="AAPL,MSFT,GOOGL">
+
+<label>Quantities</label>
+<input id="quantities" value="10,5,3">
+
+<label>Benchmark</label>
+<input id="benchmark" value="SPY">
+
+<button onclick="run()">Run</button>
+
+<label>Upload CSV</label>
+<input type="file" id="file">
+<button onclick="upload()">Upload</button>
+
+<label><b>Benchmark Allocation</b></label>
+<label>US Equity (%)</label>
+<input id="w1" value="50">
+
+<label>Canadian Equity (%)</label>
+<input id="w2" value="30">
+
+<label>Bonds (%)</label>
+<input id="w3" value="20">
+
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+<!-- KPI -->
+<div class="kpi-grid" id="kpis"></div>
+
+<!-- CHART -->
+<div class="card">
+
+<div class="btn-group">
+<button class="btn-sm" onclick="setPeriod('1mo')">1M</button>
+<button class="btn-sm" onclick="setPeriod('3mo')">3M</button>
+<button class="btn-sm" onclick="setPeriod('6mo')">6M</button>
+<button class="btn-sm" onclick="setPeriod('1y')">1Y</button>
+<button class="btn-sm" onclick="setPeriod('5y')">5Y</button>
+</div>
+
+<div id="chart"></div>
+
+</div>
+
+<!-- TABLE + PIE -->
+<div class="split">
+
+<div class="card" id="positions"></div>
+
+<div class="card">
+<div id="sector"></div>
+</div>
+
+</div>
+
+<!-- CONTRIBUTION -->
+<div class="card">
+<div id="contrib"></div>
+</div>
+
+</div>
+
+</div>
+
+<script>
+
+let period="1y";
+let currentPortfolio=null;
+
+function setPeriod(p){
+    period=p;
+    run();
+}
+
+async function run(){
+
+let tickers, quantities;
+
+if(currentPortfolio){
+    tickers=currentPortfolio.tickers;
+    quantities = [...currentPortfolio.quantities];
+}else{
+    tickers=document.getElementById("tickers").value.split(",");
+    quantities=document.getElementById("quantities").value.split(",").map(Number);
+}
+
+let benchmark=document.getElementById("benchmark").value;
+
+let res=await fetch("http://127.0.0.1:8000/api/portfolio",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({tickers,quantities,benchmark,start_date:period})
+});
+
+render(await res.json());
+}
+
+async function upload(){
+let fd=new FormData();
+fd.append("file",file.files[0]);
+
+let res=await fetch("http://127.0.0.1:8000/api/upload",{method:"POST",body:fd});
+let data=await res.json();
+
+currentPortfolio={
+    tickers:data.positions.map(p=>p.ticker),
+    quantities:data.positions.map(p=>Number(p.quantity))
+};
+
+render(data);
+}
+
+function render(d){
+
+/* KPI CARDS */
+kpis.innerHTML = `
+<div class="kpi">Value<br><b>${d.value.toFixed(0)} CAD</b></div>
+<div class="kpi">Return<br><b>${(d.metrics.Return*100).toFixed(2)}%</b></div>
+<div class="kpi">Volatility<br><b>${(d.metrics.Volatility*100).toFixed(2)}%</b></div>
+<div class="kpi">Sharpe<br><b>${d.metrics.Sharpe.toFixed(2)}</b></div>
+`;
+
+/* CHART */
+Plotly.newPlot("chart",[
+{x:d.dates,y:d.portfolio,name:"Portfolio",line:{color:"#22c55e"}},
+{x:d.dates,y:d.benchmark,name:"Benchmark",line:{color:"#ef4444"}}
+],
+{
+paper_bgcolor:"#151A23",
+plot_bgcolor:"#151A23",
+font:{color:"#EAEAEA"},
+xaxis:{gridcolor:"#3A3F4A"},
+yaxis:{gridcolor:"#3A3F4A"}
+});
+
+/* POSITIONS */
+let t="<h3>Positions</h3><table>";
+t+="<tr><th>Ticker</th><th>Type</th><th>Value CAD</th><th>%</th></tr>";
+d.positions.forEach(p=>{
+t+=`<tr><td>${p.ticker}</td><td>${p.type}</td><td>${p.value.toFixed(0)}</td><td>${(p.weight*100).toFixed(2)}%</td></tr>`;
+});
+t+="</table>";
+positions.innerHTML=t;
+
+/* SECTOR */
+Plotly.newPlot("sector",[{
+labels:Object.keys(d.sectors),
+values:Object.values(d.sectors),
+type:"pie",
+hole:0.5
+}],
+{paper_bgcolor:"#151A23",font:{color:"#EAEAEA"}});
+
+/* CONTRIBUTION */
+Plotly.newPlot("contrib",[{
+x:Object.keys(d.sector_contrib),
+y:Object.values(d.sector_contrib),
+type:"bar"
+}],
+{
+paper_bgcolor:"#151A23",
+plot_bgcolor:"#151A23",
+font:{color:"#EAEAEA"},
+xaxis:{gridcolor:"#3A3F4A"},
+yaxis:{gridcolor:"#3A3F4A"}
+});
+
+}
+
+</script>
+
+</body>
+</html>
