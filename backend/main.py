@@ -40,3 +40,7 @@ async def upload(file: UploadFile):
     df = df.dropna()
 
     return compute_portfolio(df[t].tolist(), df[q].tolist())
+
+from fastapi.staticfiles import StaticFiles
+
+app.mount("/", StaticFiles(directory="../frontend", html=True), name="frontend")

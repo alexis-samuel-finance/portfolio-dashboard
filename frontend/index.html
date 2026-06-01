@@ -213,7 +213,7 @@ if(currentPortfolio){
 
 let benchmark=document.getElementById("benchmark").value;
 
-let res=await fetch("http://127.0.0.1:8000/api/portfolio",{
+let res=await fetch("https://portfolio-dashboard-zlmh.onrender.com/api/portfolio",{
 method:"POST",
 headers:{"Content-Type":"application/json"},
 body:JSON.stringify({tickers,quantities,benchmark,start_date:period})
@@ -226,7 +226,7 @@ async function upload(){
 let fd=new FormData();
 fd.append("file",file.files[0]);
 
-let res=await fetch("http://127.0.0.1:8000/api/upload",{method:"POST",body:fd});
+let res=await fetch("https://portfolio-dashboard-zlmh.onrender.com/api/upload",{method:"POST",body:fd});
 let data=await res.json();
 
 currentPortfolio={
